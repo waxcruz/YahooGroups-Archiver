@@ -60,6 +60,10 @@ maxWaitTime = datetime.timedelta(seconds=10)
 maxServerErrors = 10
 
 
+class Error(Exception):
+  pass
+
+
 class GroupArchiver(object):
   def __init__(self, groupName, log_handler, http):
     """Archive Yahoo group
@@ -140,11 +144,13 @@ restart - delete archive and start from scratch\n""")
     resp = self.http.get(
       ('https://groups.yahoo.com/api/v1/groups/%s/messages' % self.groupName) +
          '?count=1&sortOrder=desc&direction=-1', headers=headers, cookies=cookies)
+    if resp.status_code != 200:
+      raise Error('Failed to fetch last message ID with response code %d' %
+                    resp.status_code)
     try:
-      pageHTML = resp.text
-      pageJson = json.loads(pageHTML)
+      pageJson = json.loads(resp.text)
     except ValueError as e:
-      if "Stay signed in" in pageHTML and "Trouble signing in" in pageHTML:
+      if "Stay signed in" in resp.text and "Trouble signing in" in resp.text:
         #the user needs to be signed in to Yahoo
         sys.stderr.write(
   """Error. The group you are trying to archive is a private group.
