@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 Move files from groupName/*.json to groupName/year/month/*.json based on the postDate
 in the JSON file.
@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sys
+import traceback
 
 
 def move_group(groupName):
@@ -21,24 +22,19 @@ def move_group(groupName):
   logger.addHandler(h)
   logger.setLevel(logging.INFO)
   for fname in glob.glob(os.path.join(groupName, "*.json")):
-    with open(fname, "rb") as fh:
+    with open(fname, "r") as fh:
       try:
         # Rename to groupName/year/month/msgid.json if postDate is available.
         postDate = datetime.datetime.fromtimestamp(
-          int(json.loads(fh.read())['ygData']['postDate']))
+          int(json.load(fh)['ygData']['postDate']))
         destDir = os.path.join(
           groupName, postDate.strftime('%Y'), postDate.strftime('%m'))
-        os.makedirs(destDir, exist_ok=True)
+        if not os.path.exists(destDir):
+          os.makedirs(destDir)
         dest = os.path.join(destDir, os.path.basename(fname))
         os.rename(fname, dest)
-      except json.decoder.JSONDecodeError as e:
-        logger.error('%s %s', fname, e)
-      except AttributeError as e:  # .get
-        logger.error('%s %s', fname, e)
-      except TypeError as e:  # ['key']
-        logger.error('%s %s', fname, e)
-      except ValueError as e:  # int parsing
-        logger.error('%s %s', fname, e)
+      except:
+        logger.error('%s %s', fname, traceback.format_exc())
 
 
 if __name__ == "__main__":
