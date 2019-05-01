@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 '''
 Yahoo-Groups-Archiver
@@ -28,6 +28,7 @@ import json
 import logging
 import requests
 import os
+from   six.moves import xrange
 import sys
 import shutil
 import sys
@@ -84,13 +85,14 @@ class GroupArchiver(object):
     startTime = datetime.datetime.now()
     # Implicit first number is 1.
     lastMsgNumber = self.group_messages_last()
-    
+
+    # Set msgIds to 3-tuple of (start, stop, step), for xrange.
     if mode == "restart":  # TODO: implement "reverserestart"?
       #delete all previous archival attempts and archive everything again
       self.logger.info("Clearing directory %s...", self.groupName)
       if os.path.exists(self.groupName):
         shutil.rmtree(self.groupName)
-      msgIds = range(1, lastMsgNumber + 1)
+      msgIds = (1, lastMsgNumber + 1, 1)
     elif mode in ["update", "retry", "reverseupdate", "reverseretry"]:
       self.logger.info("Scanning %s/... for existing files...", self.groupName)
       minMsgNumber = lastMsgNumber + 1
@@ -111,16 +113,16 @@ class GroupArchiver(object):
       
       if mode == "update":
         #start archiving at the last+1 message message we archived
-        msgIds = range(maxMsgNumber + 1, lastMsgNumber + 1)
+        msgIds = (maxMsgNumber + 1, lastMsgNumber + 1, 1)
       elif mode == "retry":
         #don't archive any messages we already have
         #but try to archive ones that we don't, and may have
         #already attempted to archive
-        msgIds = range(1, lastMsgNumber + 1)
+        msgIds = (1, lastMsgNumber + 1, 1)
       elif mode == "reverseupdate":
-        msgIds = range(minMsgNumber - 1, 0, -1)
+        msgIds = (minMsgNumber - 1, 0, -1)
       elif mode == "reverseretry":
-        msgIds = range(lastMsgNumber, 0, -1)
+        msgIds = (lastMsgNumber, 0, -1)
     else:
       sys.stderr.write(
 """You have specified an invalid mode (""" + mode + """)
@@ -129,10 +131,11 @@ update - add any new messages to the archive
 retry - attempt to get all messages that are not in the archive
 restart - delete archive and start from scratch\n""")
       sys.exit(1)
-  
-    os.makedirs(self.groupName, exist_ok=True)  
+
+    if not os.path.exists(self.groupName):
+      os.makedirs(self.groupName)
     self.logger.info("Archiving messages %d...%d",
-                       msgIds.start, msgIds.stop - msgIds.step)
+                       msgIds[0], msgIds[1] - msgIds[2])
     msgsArchived = self.archive_messages(msgIds)
     endTime = datetime.datetime.now()
     self.logger.info("Archive finished, archived %d, time taken is %s", msgsArchived,
@@ -167,11 +170,13 @@ restart - delete archive and start from scratch\n""")
 
   def archive_messages(self, msgIds):
     """Archive all msgNumbers in self.groupName. Return number of messages
-    successfully archived."""
+    successfully archived.
+    :param msgIds: 3-tuple of (start, stop, step), for xrange
+    """
     msgsArchived = 0
     serverErrors = 0
     waitTime = datetime.timedelta(0)
-    for x in msgIds:
+    for x in xrange(*msgIds):
       if x in self.archived:
         continue  # Already have x. For retry modes.
       if waitTime:
@@ -221,7 +226,8 @@ restart - delete archive and start from scratch\n""")
         int(json.loads(resp.text)['ygData']['postDate']))
       writeDir = os.path.join(
         self.groupName, postDate.strftime('%Y'), postDate.strftime('%m'))
-      os.makedirs(writeDir, exist_ok=True)
+      if not os.path.exists(writeDir):
+        os.makedirs(writeDir)
     except json.decoder.JSONDecodeError:
       pass
     except AttributeError:  # .get
