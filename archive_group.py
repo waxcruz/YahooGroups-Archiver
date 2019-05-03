@@ -28,11 +28,13 @@ import json
 import logging
 import requests
 import os
+import re
 from   six.moves import xrange
 import sys
 import shutil
 import sys
 import time
+import traceback
 
 
 # Avoid being spammed by Yahoo by looking like a browser.
@@ -152,21 +154,24 @@ restart - delete archive and start from scratch\n""")
                     resp.status_code)
     try:
       pageJson = json.loads(resp.text)
-    except ValueError as e:
-      if "Stay signed in" in resp.text and "Trouble signing in" in resp.text:
+    except:
+      truncated = resp.text[:200]
+      if re.search(r'yahoo.*?login', truncated, re.IGNORECASE):
         #the user needs to be signed in to Yahoo
         sys.stderr.write(
   """Error. The group you are trying to archive is a private group.
-  To archive a private group using this tool, login to a Yahoo account that
-  has access to the private groups, then extract the data from the cookies Y
-  and T from the domain yahoo.com . Paste this data into the appropriate
-  variables (cookie_Y and cookie_T) at the top of this script, and run the
-  script again.\n""")
+To archive a private group using this tool, login to a Yahoo account that
+has access to the private groups, then extract the data from the cookies Y
+and T from the domain yahoo.com . Paste this data into the appropriate
+variables (cookie_Y and cookie_T) at the top of this script, and run the
+script again.\n""")
         sys.exit(2)
       else:
-        raise e
+        sys.stderr.write(("Could not get last message ID in group because response " +
+                          "could not be parsed as JSON: %s\n%s\n") %
+                          (traceback.format_exc(), truncated.encode('utf-8')))
+        raise sys.exc_info()[1]
     return pageJson["ygData"]["lastRecordId"]
-
 
   def archive_messages(self, msgIds):
     """Archive all msgNumbers in self.groupName. Return number of messages
@@ -228,16 +233,9 @@ restart - delete archive and start from scratch\n""")
         self.groupName, postDate.strftime('%Y'), postDate.strftime('%m'))
       if not os.path.exists(writeDir):
         os.makedirs(writeDir)
-    except json.decoder.JSONDecodeError:
-      pass
-    except AttributeError:  # .get
-      pass
-    except TypeError:  # ['key']
-      pass
-    except ValueError:  # int parsing
-      pass
-    except KeyError:
-      pass
+    except:
+      self.logger.warn(("Not using date based path because postDate could " +
+                        "not be parsed: %s"), sys.exc_info()[1])
 
     # Write file with atomic rename to .json file to ensure .json files are never
     # corrupted by partial writes (caused by interruptions and crashes).
