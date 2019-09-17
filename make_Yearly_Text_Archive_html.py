@@ -40,12 +40,11 @@ def archiveYahooMessage(file, archiveFile, messageYear, format):
         f = open(archiveFile, "a")
         f.write(loadYahooMessage(file, format))
         f.close()
-        print "Yahoo Message: " + file + " archived to: archive-" + str(
-            messageYear
-        ) + ".html"
+        print(
+            "Yahoo Message: {} archived to: archive-{}.html".format(file, messageYear)
+        )
     except Exception as e:
-        print "Yahoo Message: " + file + " had an error:"
-        print e
+        print("Yahoo Message: {} had an error:\n{}".format(file, e))
 
 
 def loadYahooMessage(file, format):
@@ -145,4 +144,4 @@ else:
     sys.exit("Please run archive-group.py first")
 
 os.chdir(oldDir)
-print ("Complete")
+print("Complete")
