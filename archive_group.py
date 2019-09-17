@@ -78,6 +78,44 @@ def exit_blocked(groupName):
     sys.exit()
 
 
+def make_request(groupName, url, max_retries=3, **kwargs):
+    if "cookies" not in kwargs:
+        kwargs["cookies"] = {"T": cookie_T, "Y": cookie_Y}
+    if "allow_redirects" not in kwargs:
+        kwargs["allow_redirects"] = True
+
+    s = requests.Session()
+    attempt = 1
+    while True:
+        resp = s.get(url, **kwargs)
+        if resp.status_code == 200:
+            if attempt > 1:
+                print("Success on attempt {} of {}".format(attempt, max_retries))
+            # Success!
+            break
+        elif resp.status_code == 500:
+            # No point in looping more. We are most likely being blocked by Yahoo.
+            exit_blocked(groupName)
+        elif attempt > max_retries or resp.status_code in (404,):
+            # Unrecoverable error or max retries hit.  Time to leave no matter what.
+            log(
+                "Failed after attempt {} of {} for url {} (status: {})".format(
+                    attempt, max_retries, url, resp.status_code
+                ),
+                groupName,
+            )
+            break
+        print(
+            "Retrying after attempt {} of {} for url {} (status: {})".format(
+                attempt, max_retries, url, resp.status_code
+            )
+        )
+        time.sleep(attempt ^ 2)  # Sleep for an incremental backoff
+        attempt += 1
+
+    return resp
+
+
 def archive_group(groupName, mode="update"):
     log(
         "\nArchiving group '"
@@ -144,21 +182,22 @@ def archive_group(groupName, mode="update"):
 
 
 def group_messages_max(groupName):
-    s = requests.Session()
-    resp = s.get(
-        "https://groups.yahoo.com/api/v1/groups/"
-        + groupName
-        + "/messages?count=1&sortOrder=desc&direction=-1",
-        cookies={"T": cookie_T, "Y": cookie_Y},
+    resp = make_request(
+        groupName,
+        "https://groups.yahoo.com/api/v1/groups/{}/messages?count=1&sortOrder=desc&direction=-1".format(
+            groupName
+        ),
     )
+    if resp.status_code != 200:
+        sys.exit(1)
     try:
         pageHTML = resp.text
         pageJson = json.loads(pageHTML)
         return pageJson["ygData"]["totalRecords"]
     except ValueError:
         # "Stay signed in" and "Trouble signing in" are no longer in pageHTML,
-        # or include odd unicode encodings instead of spaces that this can't
-        # easily match.  Just print this error no matter what.
+        # or include odd encodings instead of spaces that aren't worth trying
+        # to match.  Just print this error no matter what.
         print(
             "Unexpected error getting message count.\n"
             "The group you are trying to archive is a private group. To archive\n"
@@ -169,44 +208,6 @@ def group_messages_max(groupName):
             "this script, and run the script again."
         )
         sys.exit()
-
-
-def make_request(groupName, url, max_retries=3, **kwargs):
-    if "cookies" not in kwargs:
-        kwargs["cookies"] = {"T": cookie_T, "Y": cookie_Y}
-    if "allow_redirects" not in kwargs:
-        kwargs["allow_redirects"] = True
-
-    s = requests.Session()
-    attempt = 1
-    while True:
-        resp = s.get(url, **kwargs)
-        if resp.status_code == 200:
-            if attempt > 1:
-                print("Success on attempt {} of {}".format(attempt, max_retries))
-            # Success!
-            break
-        elif resp.status_code == 500:
-            # No point in looping more. We are most likely being blocked by Yahoo.
-            exit_blocked(groupName)
-        elif attempt > max_retries or resp.status_code in (404,):
-            # Unrecoverable error or max retries hit.  Time to leave no matter what.
-            log(
-                "Failed after attempt {} of {} for url {} (status: {})".format(
-                    attempt, max_retries, url, resp.status_code
-                ),
-                groupName,
-            )
-            break
-        print(
-            "Retrying after attempt {} of {} for url {} (status: {})".format(
-                attempt, max_retries, url, resp.status_code
-            )
-        )
-        time.sleep(attempt ^ 2)  # Sleep for an incremental backoff
-        attempt += 1
-
-    return resp
 
 
 def archive_attachments(groupName, msgNumber):
