@@ -247,16 +247,16 @@ def archive_attachments(groupName, msgNumber):
                 with open(savePath, "wb") as f:
                     f.write(r.content)
                     print("Saved attachment: {}".format(savePath))
+            elif r.statusCode in (404,):
+                # Some times, attachments just aren't there.  We don't want that to
+                # trigger a False return value
+                pass
             else:
                 return False
+    return True
 
 
 def archive_message(groupName, msgNumber):
-    if saveAttachments:
-        success = archive_attachments(groupName, msgNumber)
-        if not success:
-            return False
-
     resp = make_request(
         groupName,
         "https://groups.yahoo.com/api/v1/groups/{}/messages/{}/raw".format(
@@ -265,6 +265,15 @@ def archive_message(groupName, msgNumber):
     )
     if resp.status_code != 200:
         return False
+
+    # Now that we've confirmed the message exists, try to save attachments.
+    if saveAttachments:
+        success = archive_attachments(groupName, msgNumber)
+        # If we fail to save attachments, we want to return early so that
+        # we don't save a .json file that would prevent a retry/update from
+        # re-attempting to download the attachments.
+        if not success:
+            return False
 
     msgJson = resp.text
     writeFile = open(json_path(groupName, msgNumber), "wb")
