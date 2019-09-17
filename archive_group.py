@@ -25,6 +25,9 @@ cookie_Y = "COOKIE_Y_DATA_GOES_HERE"
 # Set this to False if you do not want to write logs out to a "groupName.txt" file
 writeLogFile = True
 
+# Set this to False if you do not want to archive attachments
+saveAttachments = True
+
 import json  # required for reading various JSON attributes from the content
 import requests  # required for fetching the raw messages
 import os  # required for checking if a file exists locally
@@ -33,6 +36,46 @@ import sys  # required to cancel script if blocked by Yahoo
 import shutil  # required for deletung an old folder
 import glob  # required to find the most recent message downloaded
 import time  # required to log the date and time of run
+import re  # required to parse messages to identify/download attachments
+
+
+def json_path(groupName, msgNumber):
+    """ Return the path to the json file for a given group/message """
+    return os.path.join(groupName, "{}.json".format(msgNumber))
+
+
+def attachment_path(groupName, msgNumber, attachment):
+    """ Return the path to an attachment for given group/message """
+    return os.path.join(groupName, "{}-{}".format(msgNumber, attachment))
+
+
+def is_valid_file(path):
+    return os.path.isfile(path) and os.path.getsize(path) > 0
+
+
+def log(msg, groupName):
+    print(msg)
+    if writeLogFile:
+        logF = open(groupName + ".txt", "a")
+        logF.write("\n" + msg)
+        logF.close()
+
+
+def exit_blocked(groupName):
+    # we are most likely being blocked by Yahoo
+    log("Archive halted - it appears Yahoo has blocked you.", groupName)
+    log(
+        "Check if you can access the group's homepage from your "
+        "browser. If you can't, you have been blocked.",
+        groupName,
+    )
+    log(
+        "Don't worry, in a few hours (normally less than 3) you'll "
+        "be unblocked and you can run this script again - it'll "
+        "continue where you left off.",
+        groupName,
+    )
+    sys.exit()
 
 
 def archive_group(groupName, mode="update"):
@@ -84,10 +127,10 @@ def archive_group(groupName, mode="update"):
         os.makedirs(groupName)
     max = group_messages_max(groupName)
     for x in range(min, max + 1):
-        if not os.path.isfile(groupName + "/" + str(x) + ".json"):
+        if not is_valid_file(json_path(groupName, x)):
             print("Archiving message " + str(x) + " of " + str(max))
-            sucsess = archive_message(groupName, x)
-            if sucsess == True:
+            success = archive_message(groupName, x)
+            if success == True:
                 msgsArchived = msgsArchived + 1
 
     log(
@@ -128,73 +171,101 @@ def group_messages_max(groupName):
         sys.exit()
 
 
-def archive_message(groupName, msgNumber, depth=0):
-    global failed
-    failed = False
+def make_request(groupName, url, max_retries=3, **kwargs):
+    if "cookies" not in kwargs:
+        kwargs["cookies"] = {"T": cookie_T, "Y": cookie_Y}
+    if "allow_redirects" not in kwargs:
+        kwargs["allow_redirects"] = True
+
     s = requests.Session()
-    resp = s.get(
-        "https://groups.yahoo.com/api/v1/groups/"
-        + groupName
-        + "/messages/"
-        + str(msgNumber)
-        + "/raw",
-        cookies={"T": cookie_T, "Y": cookie_Y},
-    )
-    if resp.status_code != 200:
-        # some other problem, perhaps being refused access by Yahoo?
-        # retry for a max of 3 times anyway
-        if depth < 3:
-            print(
-                "Cannot get message "
-                + str(msgNumber)
-                + ", attempt "
-                + str(depth + 1)
-                + " of 3 due to HTTP status code "
-                + str(resp.status_code)
-            )
-            time.sleep(0.1)
-            archive_message(groupName, msgNumber, depth + 1)
-        else:
-            if resp.status_code == 500:
-                # we are most likely being blocked by Yahoo
-                log("Archive halted - it appears Yahoo has blocked you.", groupName)
-                log(
-                    "Check if you can access the group's homepage from your "
-                    "browser. If you can't, you have been blocked.",
-                    groupName,
-                )
-                log(
-                    "Don't worry, in a few hours (normally less than 3) you'll "
-                    "be unblocked and you can run this script again - it'll "
-                    "continue where you left off.",
-                    groupName,
-                )
-                sys.exit()
+    attempt = 1
+    while True:
+        resp = s.get(url, **kwargs)
+        if resp.status_code == 200:
+            if attempt > 1:
+                print("Success on attempt {} of {}".format(attempt, max_retries))
+            # Success!
+            break
+        elif resp.status_code == 500:
+            # No point in looping more. We are most likely being blocked by Yahoo.
+            exit_blocked(groupName)
+        elif attempt > max_retries or resp.status_code in (404,):
+            # Unrecoverable error or max retries hit.  Time to leave no matter what.
             log(
-                "Failed to retrive message "
-                + str(msgNumber)
-                + " due to HTTP status code "
-                + str(resp.status_code),
+                "Failed after attempt {} of {} for url {} (status: {})".format(
+                    attempt, max_retries, url, resp.status_code
+                ),
                 groupName,
             )
-            failed = True
+            break
+        print(
+            "Retrying after attempt {} of {} for url {} (status: {})".format(
+                attempt, max_retries, url, resp.status_code
+            )
+        )
+        time.sleep(attempt ^ 2)  # Sleep for an incremental backoff
+        attempt += 1
 
-    if failed == True:
+    return resp
+
+
+def archive_attachments(groupName, msgNumber):
+    # First, grab the URL that the web user interface uses to get the HTML page content.
+    # This contains links to downloadable attachments.
+    msgUrl = "https://groups.yahoo.com/neo/groups/{}/conversations/messages/{}?noNavbar=true&chrome=raw".format(
+        groupName, msgNumber
+    )
+    resp = make_request(groupName, msgUrl)
+    if resp.status_code != 200:
+        return False
+    data = json.loads(resp.text)
+    html = data["html"]
+
+    # Loop through any anchor tags that match the appropriate patterns.
+    href_pat = re.compile(r'href="(https://xa.yimg.com/kq/groups/.+?\?download=1)"')
+    filename_pat = re.compile(r'label="Download attachment (.+?)"')
+    anchors = re.findall(re.compile(r"<a\s(.+?)>"), html)
+    for a in anchors:
+        m = href_pat.search(a)
+        if not m:
+            continue
+        url = m.group(1)
+        m = filename_pat.search(a)
+        if not m:
+            continue
+        filename = m.group(1)
+        # print("Found: {}:\n  {}".format(filename, url))
+
+        # Save the attachment if we don't already have it.
+        savePath = attachment_path(groupName, msgNumber, filename)
+        if is_valid_file(savePath):
+            print("Attachment {} already exists.".format(savePath))
+        else:
+            r = make_request(groupName, url, headers={"referer": msgUrl})
+            if r.statusCode == 200:
+                with open(savePath, "wb") as f:
+                    f.write(r.content)
+                    print("Saved attachment: {}".format(savePath))
+
+
+def archive_message(groupName, msgNumber):
+    if saveAttachments:
+        archive_attachments(groupName, msgNumber)
+
+    resp = make_request(
+        groupName,
+        "https://groups.yahoo.com/api/v1/groups/{}/messages/{}/raw".format(
+            groupName, msgNumber
+        ),
+    )
+    if resp.status_code != 200:
         return False
 
     msgJson = resp.text
-    writeFile = open((groupName + "/" + str(msgNumber) + ".json"), "wb")
+    writeFile = open(json_path(groupName, msgNumber), "wb")
     writeFile.write(msgJson.encode("utf-8"))
     writeFile.close()
     return True
-
-
-def log(msg, groupName):
-    print(msg)
-    if writeLogFile:
-        logF = open(groupName + ".txt", "a")
-        logF.write("\n" + msg)
-        logF.close()
 
 
 if __name__ == "__main__":
