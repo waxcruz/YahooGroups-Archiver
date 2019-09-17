@@ -243,11 +243,11 @@ def archive_attachments(groupName, msgNumber):
             print("Attachment {} already exists.".format(savePath))
         else:
             r = make_request(groupName, url, headers={"referer": msgUrl})
-            if r.statusCode == 200:
+            if r.status_code == 200:
                 with open(savePath, "wb") as f:
                     f.write(r.content)
                     print("Saved attachment: {}".format(savePath))
-            elif r.statusCode in (404,):
+            elif r.status_code in (404,):
                 # Some times, attachments just aren't there.  We don't want that to
                 # trigger a False return value
                 pass
