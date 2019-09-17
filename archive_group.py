@@ -247,11 +247,15 @@ def archive_attachments(groupName, msgNumber):
                 with open(savePath, "wb") as f:
                     f.write(r.content)
                     print("Saved attachment: {}".format(savePath))
+            else:
+                return False
 
 
 def archive_message(groupName, msgNumber):
     if saveAttachments:
-        archive_attachments(groupName, msgNumber)
+        success = archive_attachments(groupName, msgNumber)
+        if not success:
+            return False
 
     resp = make_request(
         groupName,
