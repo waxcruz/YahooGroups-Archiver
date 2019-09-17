@@ -21,6 +21,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 cookie_T = "COOKIE_T_DATA_GOES_HERE"
 cookie_Y = "COOKIE_Y_DATA_GOES_HERE"
 
+# Set this to False if you do not want to write logs out to a "groupName.txt" file
+writeLogFile = True
+
 import json  # required for reading various JSON attributes from the content
 import requests  # required for fetching the raw messages
 import os  # required for checking if a file exists locally
@@ -67,9 +70,12 @@ def archive_group(groupName, mode="update"):
         min = 1
 
     else:
-        print("You have specified an invalid mode (" + mode + ").")
         print(
-            "Valid modes are:\nupdate - add any new messages to the archive\nretry - attempt to get all messages that are not in the archive\nrestart - delete archive and start from scratch"
+            "You have specified an invalid mode (" + mode + ").\n"
+            "Valid modes are:\n"
+            "update - add any new messages to the archive\n"
+            "retry - attempt to get all messages that are not in the archive\n"
+            "restart - delete archive and start from scratch"
         )
         sys.exit()
 
@@ -104,14 +110,21 @@ def group_messages_max(groupName):
     try:
         pageHTML = resp.text
         pageJson = json.loads(pageHTML)
+        return pageJson["ygData"]["totalRecords"]
     except ValueError:
-        if "Stay signed in" in pageHTML and "Trouble signing in" in pageHTML:
-            # the user needs to be signed in to Yahoo
-            print(
-                "Error. The group you are trying to archive is a private group. To archive a private group using this tool, login to a Yahoo account that has access to the private groups, then extract the data from the cookies Y and T from the domain yahoo.com . Paste this data into the appropriate variables (cookie_Y and cookie_T) at the top of this script, and run the script again."
-            )
-            sys.exit()
-    return pageJson["ygData"]["totalRecords"]
+        # "Stay signed in" and "Trouble signing in" are no longer in pageHTML,
+        # or include odd unicode encodings instead of spaces that this can't
+        # easily match.  Just print this error no matter what.
+        print(
+            "Unexpected error getting message count.\n"
+            "The group you are trying to archive is a private group. To archive\n"
+            "a private group using this tool, login to a Yahoo account that has\n"
+            "access to the private groups, then extract the data from the\n"
+            "cookies Y and T from the domain yahoo.com . Paste this data into\n"
+            "the appropriate variables (cookie_Y and cookie_T) at the top of\n"
+            "this script, and run the script again."
+        )
+        sys.exit()
 
 
 def archive_message(groupName, msgNumber, depth=0):
@@ -145,11 +158,14 @@ def archive_message(groupName, msgNumber, depth=0):
                 # we are most likely being blocked by Yahoo
                 log("Archive halted - it appears Yahoo has blocked you.", groupName)
                 log(
-                    "Check if you can access the group's homepage from your browser. If you can't, you have been blocked.",
+                    "Check if you can access the group's homepage from your "
+                    "browser. If you can't, you have been blocked.",
                     groupName,
                 )
                 log(
-                    "Don't worry, in a few hours (normally less than 3) you'll be unblocked and you can run this script again - it'll continue where you left off.",
+                    "Don't worry, in a few hours (normally less than 3) you'll "
+                    "be unblocked and you can run this script again - it'll "
+                    "continue where you left off.",
                     groupName,
                 )
                 sys.exit()
@@ -172,9 +188,6 @@ def archive_message(groupName, msgNumber, depth=0):
     return True
 
 
-global writeLogFile
-
-
 def log(msg, groupName):
     print(msg)
     if writeLogFile:
@@ -184,8 +197,6 @@ def log(msg, groupName):
 
 
 if __name__ == "__main__":
-    global writeLogFile
-    writeLogFile = True
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     if "nologs" in sys.argv:
         print("Logging mode OFF")
