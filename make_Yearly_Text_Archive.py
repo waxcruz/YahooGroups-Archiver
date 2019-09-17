@@ -1,4 +1,4 @@
-#!/usr/local/bin/python
+#!/usr/bin/env python
 """
 Yahoo-Groups-Archiver, Text Archive Script Copyright 2019 Robert Lancaster and others
 
