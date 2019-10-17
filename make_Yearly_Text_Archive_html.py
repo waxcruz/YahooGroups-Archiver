@@ -29,6 +29,7 @@ import os
 import sys
 from datetime import datetime
 from natsort import natsorted, ns
+import cgi
 
 # To avoid Unicode Issues
 reload(sys)
@@ -36,16 +37,16 @@ sys.setdefaultencoding("utf-8")
 
 
 def archiveYahooMessage(file, archiveFile, messageYear, format):
-    try:
-        f = open(archiveFile, "a")
-        f.write(loadYahooMessage(file, format))
-        f.close()
-        print(
-            "Yahoo Message: {} archived to: archive-{}.html".format(file, messageYear)
-        )
-    except Exception as e:
-        print("Yahoo Message: {} had an error:\n{}".format(file, e))
-
+     try:
+          f = open(archiveFile, 'a')
+          if f.tell() == 0:
+               f.write("<style>pre {white-space: pre-wrap;}</style>\n");
+          f.write(loadYahooMessage(file, format))
+          f.close()
+          print 'Yahoo Message: ' + file + ' archived to: archive-' + str(messageYear) + '.html'
+     except Exception as e:
+          print 'Yahoo Message: ' + file + ' had an error:'
+          print e
 
 def loadYahooMessage(file, format):
     f1 = open(file, "r")
@@ -78,14 +79,14 @@ def loadYahooMessage(file, format):
     message = email.message_from_string(emailMessageString)
     messageBody = getEmailBody(message)
 
-    messageText = "-----------------------------------------------------------------------------------<br>"
-    messageText += "Post ID:" + str(emailMessageID) + "<br>"
-    messageText += "Sender:" + emailMessageSender + "<br>"
-    messageText += "Post Date/Time:" + emailMessageDateTime + "<br>"
-    messageText += "Subject:" + emailMessageSubject + "<br>"
-    messageText += "Message:" + "<br><br>"
+    messageText = '-----------------------------------------------------------------------------------<br>' + "\n"
+    messageText += 'Post ID:' + str(emailMessageID) + '<br>' + "\n"
+    messageText += 'Sender:' + cgi.escape(emailMessageSender) + '<br>' + "\n"
+    messageText += 'Post Date/Time:' + cgi.escape(emailMessageDateTime) + '<br>' + "\n"
+    messageText += 'Subject:' + cgi.escape(emailMessageSubject) + '<br>' + "\n"
+    messageText += 'Message:' + '<br><br>' + "\n"
     messageText += messageBody
-    messageText += "<br><br><br><br><br>"
+    messageText += '<br><br><br><br><br>' + "\n"
     return messageText
 
 
@@ -108,19 +109,20 @@ def getEmailBody(message):
             cdispo = str(part.get("Content-Disposition"))
 
             # skip any text/plain (txt) attachments
-            if ctype == "text/plain" and "attachment" not in cdispo:
-                body += "<pre>"
-                body += part.get_payload(decode=True)  # decode
-                body += "</pre>"
+            if ctype == 'text/plain' and 'attachment' not in cdispo:
+                body += '<pre>'
+                body += cgi.escape(part.get_payload(decode=True))  # decode
+                body += '</pre>'
                 break
     # not multipart - i.e. plain text, no attachments, keeping fingers crossed
     else:
         ctype = message.get_content_type()
-        if ctype != "text/html":
-            body += "<pre>"
-        body += message.get_payload(decode=True)
-        if ctype != "text/html":
-            body += "</pre>"
+        if ctype != 'text/html':
+             body += '<pre>'
+             body += cgi.escape(message.get_payload(decode=True))
+             body += '</pre>'
+        else:
+             body += message.get_payload(decode=True)
     return body
 
 
