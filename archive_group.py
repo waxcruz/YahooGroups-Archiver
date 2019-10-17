@@ -224,7 +224,7 @@ def archive_attachments(groupName, msgNumber):
 
     # Loop through any anchor tags that match the appropriate patterns.
     href_pat = re.compile(r'href="(https://xa.yimg.com/kq/groups/.+?\?download=1)"')
-    filename_pat = re.compile(r'label="Download attachment (.+?)"')
+    filename_pat = re.compile(r'label="Download (?:photo|attachment) (.+?)"')
     anchors = re.findall(re.compile(r"<a\s(.+?)>"), html)
     for a in anchors:
         m = href_pat.search(a)
