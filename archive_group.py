@@ -87,7 +87,7 @@ def make_request(groupName, url, max_retries=3, **kwargs):
                     break
 
             except ValueError as valueError:
-                log(valueError + " while parsing " + str(url) + "response, exitting...", groupName)
+                log(str(valueError) + " while parsing " + str(url) + "response, exitting...", groupName)
                 sys.exit()
 
         elif attempt > max_retries or resp.status_code in (404,):
@@ -190,7 +190,7 @@ def group_messages_max(groupName):
         return pageJson["ygData"]["totalRecords"]
     except ValueError as valueError:
         print(
-            "Unexpected " + valueError + " while getting message count.\n"
+            "Unexpected " + str(valueError) + " while getting message count.\n"
             "If the group you are trying to archive is a private group, login\n"
             "to a Yahoo account that has access to the private groups, then\n"
             " extract the data from the cookies Y and T from the domain\n"
