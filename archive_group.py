@@ -60,24 +60,6 @@ def log(msg, groupName):
         logF.write("\n" + msg)
         logF.close()
 
-
-def exit_blocked(groupName):
-    # we are most likely being blocked by Yahoo
-    log("Archive halted - it appears Yahoo has blocked you.", groupName)
-    log(
-        "Check if you can access the group's homepage from your "
-        "browser. If you can't, you have been blocked.",
-        groupName,
-    )
-    log(
-        "Don't worry, in a few hours (normally less than 3) you'll "
-        "be unblocked and you can run this script again - it'll "
-        "continue where you left off.",
-        groupName,
-    )
-    sys.exit()
-
-
 def make_request(groupName, url, max_retries=3, **kwargs):
     if "cookies" not in kwargs:
         kwargs["cookies"] = {"T": cookie_T, "Y": cookie_Y}
@@ -94,8 +76,20 @@ def make_request(groupName, url, max_retries=3, **kwargs):
             # Success!
             break
         elif resp.status_code == 500:
-            # No point in looping more. We are most likely being blocked by Yahoo.
-            exit_blocked(groupName)
+            try:
+                pageJson = json.loads(resp.text)
+                if "ygError" not in pageJson:
+                    log("Internal Server Error while retrieving " + str(url) + ", exiting...", groupName)
+                    sys.exit()
+
+                if pageJson["ygError"]["errorMessage"] == "Internal error: Error during message fetch":
+                    log("Skipped message " + str(url) + " due to Yahoo internal server error - you should retrieve message manually through the web interface.", groupName)
+                    break
+
+            except ValueError as valueError:
+                log(valueError + " while parsing " + str(url) + "response, exitting...", groupName)
+                sys.exit()
+
         elif attempt > max_retries or resp.status_code in (404,):
             # Unrecoverable error or max retries hit.  Time to leave no matter what.
             log(
