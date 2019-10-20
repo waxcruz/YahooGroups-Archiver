@@ -188,21 +188,16 @@ def group_messages_max(groupName):
         pageHTML = resp.text
         pageJson = json.loads(pageHTML)
         return pageJson["ygData"]["totalRecords"]
-    except ValueError:
-        # "Stay signed in" and "Trouble signing in" are no longer in pageHTML,
-        # or include odd encodings instead of spaces that aren't worth trying
-        # to match.  Just print this error no matter what.
+    except ValueError as valueError:
         print(
-            "Unexpected error getting message count.\n"
-            "The group you are trying to archive is a private group. To archive\n"
-            "a private group using this tool, login to a Yahoo account that has\n"
-            "access to the private groups, then extract the data from the\n"
-            "cookies Y and T from the domain yahoo.com . Paste this data into\n"
-            "the appropriate variables (cookie_Y and cookie_T) at the top of\n"
-            "this script, and run the script again."
-        )
-        sys.exit()
-
+            "Unexpected " + valueError + " while getting message count.\n"
+            "If the group you are trying to archive is a private group, login\n"
+            "to a Yahoo account that has access to the private groups, then\n"
+            " extract the data from the cookies Y and T from the domain\n"
+            "yahoo.com . Paste this data into the appropriate variables\n"
+            "(cookie_Y and cookie_T) at the top of this script, and run the\n"
+            "script again.")
+        raise valuerError
 
 def archive_attachments(groupName, msgNumber):
     # First, grab the URL that the web user interface uses to get the HTML page content.
