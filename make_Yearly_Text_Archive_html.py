@@ -30,6 +30,7 @@ import sys
 from datetime import datetime
 from natsort import natsorted, ns
 import cgi
+import fnmatch
 
 # To avoid Unicode Issues
 reload(sys)
@@ -139,9 +140,10 @@ if os.path.exists(groupName):
         os.makedirs(archiveDir)
     os.chdir(groupName)
     for file in natsorted(os.listdir(os.getcwd())):
-        messageYear = getYahooMessageYear(file)
-        archiveFile = archiveDir + "/archive-" + str(messageYear) + ".html"
-        archiveYahooMessage(file, archiveFile, messageYear, "utf-8")
+        if fnmatch.fnmatch(file, '*.json'):
+            messageYear = getYahooMessageYear(file)
+            archiveFile = archiveDir + "/archive-" + str(messageYear) + ".html"
+            archiveYahooMessage(file, archiveFile, messageYear, "utf-8")
 else:
     sys.exit("Please run archive-group.py first")
 
