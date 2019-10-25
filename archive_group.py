@@ -19,9 +19,11 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-cookie_T = "COOKIE_T_DATA_GOES_HERE"
-cookie_Y = "COOKIE_Y_DATA_GOES_HERE"
 
+attachmentURL = 'https://groups.yahoo.com/neo/groups/View-NavionTech/attachments'
+locateMessageCountToken = '/conversations/messages/'
+cookie_Y = ''
+cookie_T = ''
 # Set this to False if you do not want to write logs out to a "groupName.txt" file
 writeLogFile = True
 
@@ -87,7 +89,7 @@ def make_request(groupName, url, max_retries=3, **kwargs):
                     break
 
             except ValueError as valueError:
-                log(str(valueError) + " while parsing " + str(url) + "response, exitting...", groupName)
+                log(str(valueError) + " while parsing " + str(url) + "response, exiting...", groupName)
                 sys.exit()
 
         elif attempt > max_retries or resp.status_code in (404,):
@@ -104,7 +106,7 @@ def make_request(groupName, url, max_retries=3, **kwargs):
                 attempt, max_retries, url, resp.status_code
             )
         )
-        time.sleep(attempt ^ 2)  # Sleep for an incremental backoff
+        time.sleep(attempt ** 2)  # Sleep for an incremental backoff
         attempt += 1
 
     return resp
